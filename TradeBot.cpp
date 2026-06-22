@@ -22,7 +22,7 @@ int main() {
         std::cout << "Running Python scraper for " << ticker << "...\n";
 
         // Run scraper.py and check for errors
-        if (system(("python scraper.py " + ticker).c_str()) == 0) {
+        if (system(("python3 scraper.py " + ticker).c_str()) == 0) {
             std::cout << "Stock data scraped successfully.\n";
         }
         else {

@@ -1,14 +1,15 @@
 import os
 import yfinance as yf
 import pandas as pd
-from datetime import datetime
-import pytz
+from zoneinfo import ZoneInfo
 import sys
 
 # Function to get the current timestamp in EST
-def get_est_timestamp(utc_timestamp):
-    utc_dt = utc_timestamp.to_pydatetime().replace(tzinfo=pytz.utc)
-    est_dt = utc_dt.astimezone(pytz.timezone("US/Eastern"))
+def get_est_timestamp(timestamp):
+    dt = timestamp.to_pydatetime() if hasattr(timestamp, "to_pydatetime") else timestamp
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+    est_dt = dt.astimezone(ZoneInfo("America/New_York"))
     return est_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
 
 # Function to calculate RSI

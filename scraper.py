@@ -1,9 +1,27 @@
 import os
+import csv
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
 import pytz
 import sys
+
+CSV_HEADER = ['Timestamp', 'Current Price', 'Ticker', 'Open', 'High', 'Low', 'Close', 'Volume', 'RSI', 'SMA10', 'SMA50', 'SMA200']
+
+def get_latest_record_key(csv_filename):
+    if not os.path.exists(csv_filename):
+        return None
+
+    with open(csv_filename, mode='r', newline='') as file:
+        reader = csv.DictReader(file)
+        latest_row = None
+        for row in reader:
+            latest_row = row
+
+    if not latest_row:
+        return None
+
+    return latest_row.get('Timestamp'), latest_row.get('Ticker')
 
 # Function to get the current timestamp in EST
 def get_est_timestamp(utc_timestamp):
@@ -71,7 +89,6 @@ def main(ticker):
     data_to_save = get_stock_data(ticker)
 
     # Convert the data to a row suitable for CSV
-    header = ['Timestamp', 'Current Price', 'Ticker', 'Open', 'High', 'Low', 'Close', 'Volume', 'RSI', 'SMA10', 'SMA50', 'SMA200']
     row_to_write = [
         data_to_save['Timestamp'],
         data_to_save['Current Price'],
@@ -87,16 +104,23 @@ def main(ticker):
         data_to_save['SMA200'],
     ]
 
-    # Append data to the CSV file
-    file_exists = os.path.exists(csv_filename)
+    record_key = (data_to_save['Timestamp'], data_to_save['Ticker'])
+    if get_latest_record_key(csv_filename) == record_key:
+        print(f"Skipping duplicate data point for {ticker}: {data_to_save['Timestamp']}")
+        return
 
-    with open(csv_filename, mode='a') as file:
+    # Append data to the CSV file
+    file_needs_header = not os.path.exists(csv_filename) or os.path.getsize(csv_filename) == 0
+
+    with open(csv_filename, mode='a', newline='') as file:
+        writer = csv.writer(file)
+
         # Write header only if the file is being created for the first time
-        if not file_exists:
-            file.write(','.join(header) + '\n')
+        if file_needs_header:
+            writer.writerow(CSV_HEADER)
         
         # Append the new row of data
-        file.write(','.join(map(str, row_to_write)) + '\n')
+        writer.writerow(row_to_write)
 
     print(f"Data saved successfully for {ticker}: {row_to_write}")
 

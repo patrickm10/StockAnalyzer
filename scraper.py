@@ -32,9 +32,15 @@ def calculate_sma(data, window):
 def get_stock_data(ticker):
     # Get historical data, including pre-market and after-hours
     data = yf.download(ticker, period="2d", interval="5m", prepost=True)
+    if data.empty:
+        print(f"No stock data returned for {ticker}.")
+        return None
 
     # Drop any rows with missing data
     data.dropna(inplace=True)
+    if data.empty:
+        print(f"No usable stock data returned for {ticker}.")
+        return None
 
     # Calculate RSI and Moving Averages
     data['RSI'] = calculate_rsi(data, window=14)
@@ -69,6 +75,9 @@ def main(ticker):
 
     print(f"Fetching stock data for {ticker}...")
     data_to_save = get_stock_data(ticker)
+    if data_to_save is None:
+        print(f"No data saved for {ticker}.")
+        return
 
     # Convert the data to a row suitable for CSV
     header = ['Timestamp', 'Current Price', 'Ticker', 'Open', 'High', 'Low', 'Close', 'Volume', 'RSI', 'SMA10', 'SMA50', 'SMA200']

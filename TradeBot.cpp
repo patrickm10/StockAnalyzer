@@ -1,10 +1,47 @@
 #include <iostream>
+#include <string>
 #include <cstdlib>   // For system()
 #include <thread>    // For sleep function
 #include <chrono>    // For time handling
 #include <cstdio>    // For file operations (remove)
+#include <unistd.h>  // For readlink, chdir
+
+namespace {
+
+std::string getExecutableDir() {
+    char path[4096];
+    const ssize_t length = readlink("/proc/self/exe", path, sizeof(path) - 1);
+    if (length == -1) {
+        return ".";
+    }
+
+    path[length] = '\0';
+    const std::string execPath(path);
+    const std::size_t slash = execPath.find_last_of('/');
+    if (slash == std::string::npos) {
+        return ".";
+    }
+
+    return execPath.substr(0, slash);
+}
+
+bool changeToExecutableDir() {
+    const std::string execDir = getExecutableDir();
+    if (chdir(execDir.c_str()) != 0) {
+        std::cerr << "Failed to change to executable directory: " << execDir << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+}  // namespace
 
 int main() {
+    if (!changeToExecutableDir()) {
+        return 1;
+    }
+
     std::string ticker = "SPY";  // Define the ticker as a string
     std::string csvFilename = ticker + "_stock_data.csv";  // Generate CSV filename dynamically
 

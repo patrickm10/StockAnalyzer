@@ -63,9 +63,13 @@ def get_stock_data(ticker):
 
     return data_to_save
 
+def get_csv_filename(ticker):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(script_dir, f'{ticker}_stock_data.csv')
+
 # Main function to fetch data and append to the CSV file
 def main(ticker):
-    csv_filename = f'{ticker}_stock_data.csv'
+    csv_filename = get_csv_filename(ticker)
 
     print(f"Fetching stock data for {ticker}...")
     data_to_save = get_stock_data(ticker)

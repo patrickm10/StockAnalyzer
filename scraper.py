@@ -1,15 +1,60 @@
 import os
+import csv
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
 import pytz
 import sys
 
-# Function to get the current timestamp in EST
-def get_est_timestamp(utc_timestamp):
-    utc_dt = utc_timestamp.to_pydatetime().replace(tzinfo=pytz.utc)
-    est_dt = utc_dt.astimezone(pytz.timezone("US/Eastern"))
-    return est_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+CSV_HEADER = ['Timestamp', 'Current Price', 'Ticker', 'Open', 'High', 'Low', 'Close', 'Volume', 'RSI', 'SMA10', 'SMA50', 'SMA200']
+EASTERN = pytz.timezone("US/Eastern")
+
+
+def normalize_to_eastern(timestamp):
+    dt = timestamp.to_pydatetime() if hasattr(timestamp, "to_pydatetime") else timestamp
+    if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+        dt = pytz.utc.localize(dt)
+    return dt.astimezone(EASTERN)
+
+
+def floor_to_five_minute_bar(timestamp):
+    est_dt = normalize_to_eastern(timestamp)
+    floored_minute = (est_dt.minute // 5) * 5
+    return est_dt.replace(minute=floored_minute, second=0, microsecond=0)
+
+
+def format_bar_timestamp(timestamp):
+    return floor_to_five_minute_bar(timestamp).strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
+def get_bar_record_key(timestamp_str, ticker):
+    timestamp_part = timestamp_str.rsplit(" ", 1)[0]
+    parsed = datetime.strptime(timestamp_part, "%Y-%m-%d %H:%M:%S")
+    localized = EASTERN.localize(parsed)
+    floored = floor_to_five_minute_bar(localized)
+    return floored.strftime("%Y-%m-%d %H:%M:%S"), ticker
+
+
+def get_latest_record_key(csv_filename):
+    if not os.path.exists(csv_filename):
+        return None
+
+    with open(csv_filename, mode='r', newline='') as file:
+        reader = csv.DictReader(file)
+        latest_row = None
+        for row in reader:
+            latest_row = row
+
+    if not latest_row:
+        return None
+
+    timestamp = latest_row.get('Timestamp')
+    ticker = latest_row.get('Ticker')
+    if not timestamp or not ticker:
+        return None
+
+    return get_bar_record_key(timestamp, ticker)
+
 
 # Function to calculate RSI
 def calculate_rsi(data, window=14):
@@ -47,7 +92,7 @@ def get_stock_data(ticker):
 
     # Ensure all extracted values are scalars using `.item()`
     data_to_save = {
-        'Timestamp': get_est_timestamp(latest_data.name),  # Convert to EST
+        'Timestamp': format_bar_timestamp(latest_data.name),
         'Current Price': latest_data['Close'].item(),
         'Ticker': ticker,
         'Open': latest_data['Open'].item(),
@@ -71,7 +116,6 @@ def main(ticker):
     data_to_save = get_stock_data(ticker)
 
     # Convert the data to a row suitable for CSV
-    header = ['Timestamp', 'Current Price', 'Ticker', 'Open', 'High', 'Low', 'Close', 'Volume', 'RSI', 'SMA10', 'SMA50', 'SMA200']
     row_to_write = [
         data_to_save['Timestamp'],
         data_to_save['Current Price'],
@@ -87,16 +131,21 @@ def main(ticker):
         data_to_save['SMA200'],
     ]
 
-    # Append data to the CSV file
-    file_exists = os.path.exists(csv_filename)
+    record_key = get_bar_record_key(data_to_save['Timestamp'], data_to_save['Ticker'])
+    if get_latest_record_key(csv_filename) == record_key:
+        print(f"Skipping duplicate 5-minute bar for {ticker}: {data_to_save['Timestamp']}")
+        return
 
-    with open(csv_filename, mode='a') as file:
-        # Write header only if the file is being created for the first time
-        if not file_exists:
-            file.write(','.join(header) + '\n')
-        
-        # Append the new row of data
-        file.write(','.join(map(str, row_to_write)) + '\n')
+    # Append data to the CSV file
+    file_needs_header = not os.path.exists(csv_filename) or os.path.getsize(csv_filename) == 0
+
+    with open(csv_filename, mode='a', newline='') as file:
+        writer = csv.writer(file)
+
+        if file_needs_header:
+            writer.writerow(CSV_HEADER)
+
+        writer.writerow(row_to_write)
 
     print(f"Data saved successfully for {ticker}: {row_to_write}")
 

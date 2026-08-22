@@ -1,9 +1,54 @@
 import os
+import csv
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
 import pytz
 import sys
+
+BAR_INTERVAL = pd.Timedelta(minutes=5)
+CSV_HEADER = ['Timestamp', 'Current Price', 'Ticker', 'Open', 'High', 'Low', 'Close', 'Volume', 'RSI', 'SMA10', 'SMA50', 'SMA200']
+
+
+def get_saveable_row(data, now=None):
+    """Return the latest completed 5-minute bar.
+
+    yfinance's last row is the in-progress interval bar whose OHLCV and indicators
+    are still changing. During an active interval we persist the previous bar instead.
+    """
+    if data is None or data.empty:
+        return None
+
+    last_row = data.iloc[-1]
+    last_ts = last_row.name
+    if now is None:
+        tz = last_ts.tzinfo if getattr(last_ts, "tzinfo", None) else pytz.UTC
+        now = pd.Timestamp.now(tz=tz)
+
+    if now >= last_ts + BAR_INTERVAL:
+        return last_row
+
+    if len(data) >= 2:
+        return data.iloc[-2]
+
+    return None
+
+
+def get_latest_record_key(csv_filename):
+    if not os.path.exists(csv_filename):
+        return None
+
+    with open(csv_filename, mode='r', newline='') as file:
+        reader = csv.DictReader(file)
+        latest_row = None
+        for row in reader:
+            latest_row = row
+
+    if not latest_row:
+        return None
+
+    return latest_row.get('Timestamp'), latest_row.get('Ticker')
+
 
 # Function to get the current timestamp in EST
 def get_est_timestamp(utc_timestamp):
@@ -42,8 +87,10 @@ def get_stock_data(ticker):
     data['SMA50'] = calculate_sma(data, window=50)
     data['SMA200'] = calculate_sma(data, window=200)
 
-    # Get the most recent data (latest available 5-minute interval)
-    latest_data = data.iloc[-1]
+    latest_data = get_saveable_row(data)
+    if latest_data is None:
+        print(f"No completed 5-minute bar available for {ticker}.")
+        return None
 
     # Ensure all extracted values are scalars using `.item()`
     data_to_save = {
@@ -69,9 +116,16 @@ def main(ticker):
 
     print(f"Fetching stock data for {ticker}...")
     data_to_save = get_stock_data(ticker)
+    if data_to_save is None:
+        print(f"No data saved for {ticker}.")
+        return
+
+    record_key = (data_to_save['Timestamp'], data_to_save['Ticker'])
+    if get_latest_record_key(csv_filename) == record_key:
+        print(f"Skipping already-saved bar for {ticker}: {data_to_save['Timestamp']}")
+        return
 
     # Convert the data to a row suitable for CSV
-    header = ['Timestamp', 'Current Price', 'Ticker', 'Open', 'High', 'Low', 'Close', 'Volume', 'RSI', 'SMA10', 'SMA50', 'SMA200']
     row_to_write = [
         data_to_save['Timestamp'],
         data_to_save['Current Price'],
@@ -88,15 +142,13 @@ def main(ticker):
     ]
 
     # Append data to the CSV file
-    file_exists = os.path.exists(csv_filename)
+    file_needs_header = not os.path.exists(csv_filename) or os.path.getsize(csv_filename) == 0
 
-    with open(csv_filename, mode='a') as file:
-        # Write header only if the file is being created for the first time
-        if not file_exists:
-            file.write(','.join(header) + '\n')
-        
-        # Append the new row of data
-        file.write(','.join(map(str, row_to_write)) + '\n')
+    with open(csv_filename, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        if file_needs_header:
+            writer.writerow(CSV_HEADER)
+        writer.writerow(row_to_write)
 
     print(f"Data saved successfully for {ticker}: {row_to_write}")
 

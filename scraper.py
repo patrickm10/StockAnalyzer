@@ -5,6 +5,10 @@ from datetime import datetime
 import pytz
 import sys
 
+# SMA200 needs 200 completed 5-minute bars; 2 calendar days is often fewer (e.g. Monday mornings).
+LOOKBACK_PERIOD = "60d"
+SMA200_WINDOW = 200
+
 # Function to get the current timestamp in EST
 def get_est_timestamp(utc_timestamp):
     utc_dt = utc_timestamp.to_pydatetime().replace(tzinfo=pytz.utc)
@@ -31,7 +35,7 @@ def calculate_sma(data, window):
 # Function to fetch and process stock data
 def get_stock_data(ticker):
     # Get historical data, including pre-market and after-hours
-    data = yf.download(ticker, period="2d", interval="5m", prepost=True)
+    data = yf.download(ticker, period=LOOKBACK_PERIOD, interval="5m", prepost=True)
 
     # Drop any rows with missing data
     data.dropna(inplace=True)
@@ -40,7 +44,7 @@ def get_stock_data(ticker):
     data['RSI'] = calculate_rsi(data, window=14)
     data['SMA10'] = calculate_sma(data, window=10)
     data['SMA50'] = calculate_sma(data, window=50)
-    data['SMA200'] = calculate_sma(data, window=200)
+    data['SMA200'] = calculate_sma(data, window=SMA200_WINDOW)
 
     # Get the most recent data (latest available 5-minute interval)
     latest_data = data.iloc[-1]

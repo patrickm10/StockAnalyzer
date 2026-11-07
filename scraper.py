@@ -28,10 +28,20 @@ def calculate_rsi(data, window=14):
 def calculate_sma(data, window):
     return data['Close'].rolling(window=window).mean()
 
+def _flatten_price_columns(data):
+    """yfinance returns a MultiIndex (Price, Ticker) for OHLCV; flatten to simple names."""
+    if isinstance(data.columns, pd.MultiIndex):
+        # Single-ticker download: drop the ticker level so Close/Open/... are unique Series.
+        data = data.copy()
+        data.columns = data.columns.droplevel(1)
+    return data
+
+
 # Function to fetch and process stock data
 def get_stock_data(ticker):
     # Get historical data, including pre-market and after-hours
     data = yf.download(ticker, period="2d", interval="5m", prepost=True)
+    data = _flatten_price_columns(data)
 
     # Drop any rows with missing data
     data.dropna(inplace=True)
